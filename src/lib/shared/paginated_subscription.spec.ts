@@ -132,3 +132,90 @@ describe('subscribePaginated', () => {
 		expect(getCurrentValue).not.toHaveBeenCalled();
 	});
 });
+
+// onError returns true when it accepted a reset. Clients share one paginated
+// query per args, so the subscription must be released right away: a
+// subscriber still holding the failed query hands it to the next one.
+describe('subscribePaginated after an accepted reset', () => {
+	it('releases at once, and only once', () => {
+		let reportError: (error: Error) => void = () => {};
+		let notify = () => {};
+		const unsubscribe = Object.assign(vi.fn(), { getCurrentValue: () => page });
+		const onSnapshot = vi.fn();
+		const onError = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+		const cleanup = subscribePaginated(
+			clientWith((onUpdate, reportClientError) => {
+				notify = onUpdate;
+				reportError = reportClientError;
+				return unsubscribe;
+			}),
+			ref,
+			{},
+			10,
+			onSnapshot,
+			onError
+		);
+		onSnapshot.mockClear();
+
+		reportError(new Error('boom')); // not a reset: keep the subscription
+		expect(unsubscribe).not.toHaveBeenCalled();
+		reportError(new Error('InvalidCursor'));
+		expect(unsubscribe).toHaveBeenCalledOnce();
+
+		// Callbacks of the released subscription are ignored.
+		notify();
+		reportError(new Error('InvalidCursor'));
+		cleanup();
+		expect(onSnapshot).not.toHaveBeenCalled();
+		expect(onError).toHaveBeenCalledTimes(2);
+		expect(unsubscribe).toHaveBeenCalledOnce();
+	});
+
+	it('releases once the client returned the subscription, when it reported the error while subscribing', () => {
+		const getCurrentValue = vi.fn(() => page);
+		const unsubscribe = Object.assign(vi.fn(), { getCurrentValue });
+		const onError = vi.fn(() => true);
+
+		const cleanup = subscribePaginated(
+			clientWith((_onUpdate, reportError) => {
+				reportError(new Error('InvalidCursor'));
+				expect(unsubscribe).not.toHaveBeenCalled();
+				return unsubscribe;
+			}),
+			ref,
+			{},
+			10,
+			vi.fn(),
+			onError
+		);
+
+		expect(onError).toHaveBeenCalledOnce();
+		expect(unsubscribe).toHaveBeenCalledOnce();
+		expect(getCurrentValue).not.toHaveBeenCalled();
+		expect(() => cleanup()).not.toThrow();
+		expect(unsubscribe).toHaveBeenCalledOnce();
+	});
+
+	it('releases when the cached value of a shared query has failed', () => {
+		const unsubscribe = Object.assign(vi.fn(), {
+			getCurrentValue: () => {
+				throw new Error('InvalidCursor');
+			}
+		});
+		const onError = vi.fn(() => true);
+
+		const cleanup = subscribePaginated(
+			clientWith(() => unsubscribe),
+			ref,
+			{},
+			10,
+			vi.fn(),
+			onError
+		);
+
+		expect(onError).toHaveBeenCalledWith(new Error('InvalidCursor'), true);
+		expect(unsubscribe).toHaveBeenCalledOnce();
+		cleanup();
+		expect(unsubscribe).toHaveBeenCalledOnce();
+	});
+});
