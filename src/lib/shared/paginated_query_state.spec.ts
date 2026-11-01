@@ -287,4 +287,16 @@ describe('PaginatedQueryStateMachine InvalidCursor reset limit (#61)', () => {
 		machine.reset();
 		expect(machine.onError(invalidCursor())).toBe(true);
 	});
+
+	it('allows another reset after the page size changed, not for the same size', () => {
+		const machine = machineWithArgs();
+		machine.onError(invalidCursor());
+
+		// Wrappers pass the page size on every run.
+		machine.updateConfig({ initialNumItems: 3 });
+		expect(machine.onError(invalidCursor())).toBe(false);
+
+		machine.updateConfig({ initialNumItems: 5 });
+		expect(machine.onError(invalidCursor())).toBe(true);
+	});
 });

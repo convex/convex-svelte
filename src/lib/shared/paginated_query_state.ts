@@ -432,6 +432,15 @@ export class PaginatedQueryStateMachine<T> {
 	 * Update runtime options that may be provided reactively by framework wrappers.
 	 */
 	updateConfig(config: Partial<PaginatedQueryConfig<T>>): void {
+		// A different page size subscribes to a different query, so it gets its
+		// own InvalidCursor reset. Wrappers call this on every run, so an
+		// unchanged size must not re-arm, or a persistent InvalidCursor loops.
+		if (
+			config.initialNumItems !== undefined &&
+			config.initialNumItems !== this.config.initialNumItems
+		) {
+			this.invalidCursorResetArmed = true;
+		}
 		this.config = {
 			...this.config,
 			...config
