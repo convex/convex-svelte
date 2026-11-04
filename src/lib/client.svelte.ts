@@ -127,11 +127,15 @@ export function useQuery<Query extends FunctionReference<'query'>>(
 		argsForLastResult: FunctionArgs<Query> | Skip | undefined;
 		// If the args have never changed, fine to use initialData if provided.
 		haveArgsEverChanged: boolean;
+		// Counts the answers received. An answer equal to the stored result (a primitive such
+		// as a string) leaves `result` unchanged, so it alone would not recompute `syncResult`.
+		updates: number;
 	} = $state({
 		result: parseOptions(options).initialData,
 		lastResult: undefined,
 		argsForLastResult: undefined,
-		haveArgsEverChanged: false
+		haveArgsEverChanged: false,
+		updates: 0
 	});
 
 	// When args change we need to unsubscribe to the old query and subscribe
@@ -159,9 +163,11 @@ export function useQuery<Query extends FunctionReference<'query'>>(
 				state.result = copy;
 				state.argsForLastResult = argsObject;
 				state.lastResult = copy;
+				state.updates++;
 			},
 			(e: Error) => {
 				state.result = e;
+				state.updates++;
 				state.argsForLastResult = argsObject;
 				const copy = structuredClone(e);
 				state.lastResult = copy;
@@ -237,8 +243,9 @@ export function useQuery<Query extends FunctionReference<'query'>>(
 			}
 			value = e;
 		}
-		// Touch reactive state.result so updates retrigger computations
-		void state.result;
+		// Touch the reactive answer count so every answer retriggers computations, also one
+		// equal to the stored result
+		void state.updates;
 		return value;
 	});
 
