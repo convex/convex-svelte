@@ -167,10 +167,10 @@ export function useQuery<Query extends FunctionReference<'query'>>(
 			},
 			(e: Error) => {
 				state.result = e;
-				state.updates++;
 				state.argsForLastResult = argsObject;
 				const copy = structuredClone(e);
 				state.lastResult = copy;
+				state.updates++;
 			}
 		);
 
